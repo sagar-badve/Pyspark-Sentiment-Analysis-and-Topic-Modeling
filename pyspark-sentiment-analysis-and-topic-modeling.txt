@@ -1,0 +1,119 @@
+#Pyspark Sentiment Analysis and Topic Modeling
+#################################################################################################################################################
+#ANEW Sentiment Analysis using Pyspark
+
+anew1 = sc.addPyFile("anewcode.py file path")
+tweets = sc.textFile("cleaned_text_file_path")
+
+import anewcode
+def parse(line):
+    fields=line.split("\n")
+    tweets=fields[0]
+    return(tweets)
+
+tweetparse=tweets.map(parse)
+each _word=tweetparse.flatMap(lambda x: x.split())
+d= each_word.map(lambda x:(anewcode.sentiment(x)))
+arousal_score= d.map(lambda x: x['arousal']).reduce(lambda x, y: (x+y))
+valence_score = d.map(lambda x: x['valence']).reduce(lambda x, y: (x+y))
+arousal_score
+valence_score
+
+##################################################################################################################################################
+#Spark LDA for topic modeling for Web of Science Abstracts:
+
+from pyspark import SparkConf, SparkContext
+conf = SparkConf().setAppName("My App")
+sc = SparkContext(conf = conf)
+my_data = sc.textFile("cleaned_abstracts_file_path")
+list1 = my_data.map(lambda line: line.split("\t"))
+list2 = []
+for i in list1.take(21351):
+    if i[21]=='AB':
+        pass
+    else:
+        list2.append(i[21])        
+print(len(list2))
+
+from nltk.corpus import stopwords 
+import string
+
+stop_words = set(stopwords.words('english'))
+punct = set(string.punctuation) 
+def preprocessing(doc):
+    stop_words_removed = " ".join([i for i in doc.lower().split() if i not in stop_words])
+    punct_removed = ''.join(ch for ch in stop_words_removed if ch not in punct)
+    return punct_removed
+processed_docs = [preprocessing(doc).split() for doc in list2]                      
+list3 = list(enumerate(processed_docs))
+
+from pyspark.sql import SQLContext, Row
+sqlContext = SQLContext(sc)
+document_dataframe = sqlContext.createDataFrame(list3, ("document_id", "document_text"))
+document_dataframe.printSchema()
+df = (document_dataframe.rdd.map(lambda item:(item.document_id, item.document_text)).toDF().withColumnRenamed("_1","document_id").withColumnRenamed("_2","words"))
+
+from pyspark.ml.feature import CountVectorizer
+Vector = CountVectorizer(inputCol="words", outputCol="features")
+model = Vector.fit(df)
+result = model.transform(df)
+vocabulary = model.vocabulary
+len(vocabulary)
+
+corpus_size = result.count() 
+corpus_size
+result.show()
+
+from pyspark.ml.clustering import LDA
+lda = LDA(k=5, seed=1, optimizer="em")
+model1 = lda.fit(result)
+model1.vocabSize()
+
+model1.describeTopics().show(truncate=False)
+topics = model1.topicsMatrix()
+topics
+
+final_topics = model1.describeTopics()
+final_topics.columns
+final_term_indices = final_topics.select("termIndices")
+final_term_indices.show()
+
+list_indices = []
+for i in final_term_indices.head(10):
+    list_indices.append(i)
+list_indices
+
+#Code to display the topics and their scores
+final_terms_dict = {}
+for i in range(len(list_indices)):
+    final_terms_list = []
+    for j in (list_indices[i].termIndices):
+        final_terms_list.append(vocabulary[j])        
+    final_terms_dict[i] = final_terms_list
+final_terms_dict.values()
+final_terms_dict.keys()
+for i in final_terms_dict.keys():
+    print(final_terms_dict[i])
+    print("\n")
+
+final_term_weights = final_topics.select("termWeights")
+final_term_weights.show()
+
+list_weights = []
+for i in final_term_weights.head(10):
+    list_weights.append(i)
+list_weights[0].termWeights
+
+final_weights_dict = {}
+
+for i in range(len(list_weights)):
+    final_weights_list = []
+    for j in (list_weights[i].termWeights):
+        final_weights_list.append(j)        
+    final_weights_dict[i] = final_weights_list
+
+for i in final_weights_dict.keys():
+    print(final_weights_dict[i])
+    print("\n")
+
+##################################################################################################################################################
