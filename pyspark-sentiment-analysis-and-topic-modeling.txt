@@ -28,7 +28,7 @@ sc = SparkContext(conf = conf)
 my_data = sc.textFile("cleaned_abstracts_file_path")
 list1 = my_data.map(lambda line: line.split("\t"))
 list2 = []
-for i in list1.take(21351):
+for i in list1.collect():
     if i[21]=='AB':
         pass
     else:
